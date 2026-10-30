@@ -1,0 +1,5 @@
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+GRANT ALL PRIVILEGES ON SCHEMA analytics TO analyst;
+
+GRANT CREATE ON SCHEMA analytics TO analyst;
