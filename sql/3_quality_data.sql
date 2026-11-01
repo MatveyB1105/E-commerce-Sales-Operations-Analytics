@@ -23,8 +23,8 @@ FROM analytics.olist_customers_dataset
 GROUP BY customer_unique_id
 HAVING COUNT(*) > 1
 ORDER BY duplicates DESC;
--- Вывод 2997 имеют дупликаты (если заменить customer_unique_id на customer_id то таблица будет иметь 0 дупликатов)
--- customer_id, customer_unique_id - 0 дупликатов
+-- Вывод 2997 имеют дупликаты
+-- Проверка на группах customer_id, customer_unique_id - 0 дупликатов
 
 -- Проверка на дупликаты из таблицы продукты
 SELECT product_id, COUNT(*) as duplicates
@@ -49,71 +49,6 @@ GROUP BY order_id
 HAVING COUNT(*) > 1
 ORDER BY duplicates DESC;
 -- 0
-
-/* Проверка на NULL в ключах */
-
--- ORDERS
-SELECT COUNT(*)
-FROM analytics.olist_orders_dataset
-WHERE order_id IS NULL OR customer_id IS NULL; -- 0
-
--- ITEMS
-SELECT COUNT(*)
-FROM analytics.olist_order_items_dataset
-WHERE order_id IS NULL OR order_item_id IS NULL
- OR product_id IS NULL OR seller_id IS NULL; -- 0
-
--- PAYMENTS
-SELECT COUNT(*)
-FROM analytics.olist_order_payments_dataset
-WHERE order_id IS NULL OR payment_sequential IS NULL; -- 0
-
--- CUSTOMERS
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_customers_dataset
-WHERE customer_id IS NULL
-   OR customer_unique_id IS NULL; -- 0
-
--- PRODUCTS
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_products_dataset
-WHERE product_id IS NULL; -- 0
-
--- SELLERS
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_sellers_dataset
-WHERE seller_id IS NULL; -- 0
-
--- REVIEWS
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_order_reviews_dataset
-WHERE review_id IS NULL
-   OR order_id IS NULL; -- 0
-
--- ORDER ITEMS
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_order_items_dataset
-WHERE order_id IS NULL
-   OR order_item_id IS NULL
-   OR product_id IS NULL
-   OR seller_id IS NULL; -- 0
-
--- PAYMENTS
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_order_payments_dataset
-WHERE order_id IS NULL
-   OR payment_sequential IS NULL; -- 0
-
--- GEOLOCATION
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.olist_geolocation_dataset
-WHERE geolocation_zip_code_prefix IS NULL; -- 0
-
--- CATEGORY TRANSLATION
-SELECT COUNT(*) AS invalid_rows
-FROM analytics.product_category_name_translation
-WHERE product_category_name IS NULL
-   OR product_category_name_english IS NULL; -- 0
 
 /* Инварианты времени в заказах */
 
@@ -153,7 +88,28 @@ WHERE product_name_lenght < 0
    OR product_height_cm < 0
    OR product_width_cm < 0; -- ok
 
-/* Анализ дупликатов отызвов */
+/* Проверка временной логики заказов */
+-- Одобрение заказа раньше момента покупки
+SELECT *
+FROM analytics.olist_orders_dataset
+WHERE order_approved_at < order_purchase_timestamp; -- 0
+
+-- Передача перевозчику раньше одобрения
+SELECT *
+FROM analytics.olist_orders_dataset
+WHERE order_delivered_carrier_date < order_approved_at; --1351 строк (аномалия)
+
+-- Доставка покупателю раньше передачи перевозчику
+SELECT *
+FROM analytics.olist_orders_dataset
+WHERE order_delivered_customer_date < order_delivered_carrier_date; -- 23 строки (аномалия)
+
+-- Ожидаемая дата доставки раньше покупки
+SELECT *
+FROM analytics.olist_orders_dataset
+WHERE order_estimated_delivery_date < order_purchase_timestamp; -- 0
+
+/* Анализ дупликатов отзывов */
 
 SELECT
     review_id,
