@@ -195,3 +195,124 @@ SELECT
 FROM monthly_growth
 
 ORDER BY month;
+
+/*
+Order Status Analysis
+Determine how orders are distributed by status and what proportion of orders are successfully delivered.
+*/
+-- Print orders count by status
+SELECT
+    f.order_status,
+    COUNT(DISTINCT f.order_id) AS orders_count,
+    ROUND(
+        100.0 * COUNT(DISTINCT f.order_id)
+        / SUM(COUNT(DISTINCT f.order_id)) OVER (),
+        2
+    ) AS status_percentage
+FROM analytics_mart.fact_orders AS f
+GROUP BY f.order_status
+ORDER BY orders_count DESC, f.order_status;
+
+-- Print KPI: Total / Delivered / Canceled + rates
+SELECT
+    COUNT(DISTINCT f.order_id) AS total_orders,
+
+    COUNT(DISTINCT CASE WHEN f.order_status = 'delivered'
+                        THEN f.order_id END) AS delivered_orders,
+
+    COUNT(DISTINCT CASE WHEN f.order_status = 'canceled'
+                        THEN f.order_id END) AS canceled_orders,
+
+    -- Delivered Rate = Delivered Orders / Total Orders * 100%
+    ROUND(
+        100.0 * COUNT(DISTINCT CASE WHEN f.order_status = 'delivered'
+                                    THEN f.order_id END)
+        / NULLIF(COUNT(DISTINCT f.order_id), 0),
+        2
+    ) AS delivered_rate,
+
+    -- Canceled Rate = Canceled Orders / Total Orders * 100%
+    ROUND(
+        100.0 * COUNT(DISTINCT CASE WHEN f.order_status = 'canceled'
+                                    THEN f.order_id END)
+        / NULLIF(COUNT(DISTINCT f.order_id), 0),
+        2
+    ) AS canceled_rate
+FROM analytics_mart.fact_orders AS f;
+
+-- Print order status structure by year of purchase
+SELECT
+    d.calendar_year,
+    f.order_status,
+    COUNT(DISTINCT f.order_id) AS orders_count,
+    ROUND(
+        100.0 * COUNT(DISTINCT f.order_id)
+        / SUM(COUNT(DISTINCT f.order_id)) OVER (PARTITION BY d.calendar_year),
+        2
+    ) AS status_percentage_in_year
+FROM analytics_mart.fact_orders AS f
+JOIN analytics_mart.dim_date AS d
+    ON d.date_key = f.purchase_date
+GROUP BY d.calendar_year, f.order_status
+ORDER BY d.calendar_year, orders_count DESC, f.order_status;
+
+/*
+Sales by product category
+*/
+
+WITH category_sales as (
+    SELECT
+        p.product_category as category,
+        COUNT(DISTINCT fi.order_id) as total_orders,
+        COUNT(*) as products_sold,
+        SUM(fi.price) as GMV,
+        ROUND(AVG(fi.price), 2) as average_price,
+        ROUND(
+            100.0 * SUM(fi.price)
+            / SUM(SUM(fi.price)) OVER (),
+            2
+        )  as gmv_share
+
+    FROM analytics_mart.fact_order_items fi
+    LEFT JOIN analytics_mart.dim_products p
+        ON fi.product_id = p.product_id
+    GROUP BY p.product_category
+)
+SELECT
+    category,
+    total_orders,
+    products_sold,
+    GMV,
+    average_price,
+    gmv_share
+FROM category_sales
+ORDER BY GMV DESC, category
+LIMIT 10;
+
+-- Top category with the highest average sales
+
+WITH category_sales as (
+    SELECT
+        p.product_category as category,
+        COUNT(DISTINCT fi.order_id) as total_orders,
+        COUNT(*) as products_sold,
+        SUM(fi.price) as GMV,
+        ROUND(AVG(fi.price), 2) as average_price,
+
+    FROM analytics_mart.fact_order_items fi
+    LEFT JOIN analytics_mart.dim_products p
+        ON fi.product_id = p.product_id
+    GROUP BY p.product_category
+    HAVING COUNT(DISTINCT fi.order_id) > 30
+)
+
+SELECT
+    category,
+    total_orders,
+    GMV,
+    average_price
+FROM
+    category_sales
+ORDER by average_price DESC
+LIMIT 10;
+

@@ -1,0 +1,26 @@
+Total Orders = DISTINCTCOUNT(fact_orders[order_id])
+
+Delivered Orders = CALCULATE([Total Orders], fact_orders[order_status] = "delivered")
+
+Delivered GMV =
+CALCULATE(
+    SUM(fact_order_items[price]),
+    fact_order_items[order_status] IN { "delivered", "shipped" }
+)
+
+Delivered AOV =
+DIVIDE(
+    [Delivered GMV],
+    CALCULATE(
+        DISTINCTCOUNT(fact_order_items[order_id]),
+        fact_order_items[order_status] IN { "delivered", "shipped" }
+    )
+)
+
+Total Customers = DISTINCTCOUNT(dim_customers[customer_unique_id])
+
+Total Freight =
+CALCULATE(
+    SUM(fact_order_items[freight_value]),
+    fact_order_items[order_status] = "delivered"
+)
